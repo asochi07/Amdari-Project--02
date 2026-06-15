@@ -1,5 +1,10 @@
 flask==2.0.1
-psycopg2-binary==2.9.1
+Werkzeug==2.0.3
+Jinja2==3.0.3
+MarkupSafe==2.0.1
+itsdangerous==2.0.1
+click==8.0.4
+psycopg2-binary==2.9.5
 redis==4.3.4
 pyjwt==1.7.1
 requests==2.25.1
