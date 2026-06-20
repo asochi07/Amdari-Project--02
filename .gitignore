@@ -11,3 +11,4 @@ venv/
 htmlcov/
 node_modules/
 *.log
+security/scans/gitleaks.json
