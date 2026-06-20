@@ -32,7 +32,8 @@ def issue_token(user_id: int, role: str) -> str:
     V-APP-02 (part 1): HS256 with a low-entropy, repository-committed secret.
     """
     payload = {"user_id": user_id, "role": role}
-    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    return token.decode("utf-8") if isinstance(token, bytes) else token
 
 
 def decode_token(token: str) -> dict:
@@ -42,8 +43,7 @@ def decode_token(token: str) -> dict:
     code below sets verify=False to "make local testing easier" per a comment
     that was never reverted.
     """
-    # TODO(femi): re-enable verification once we sort out the staging keys
-    return jwt.decode(token, JWT_SECRET, algorithms=["HS256", "none"], options={"verify_signature": False})
+    return jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
 
 
 def require_auth(f):
