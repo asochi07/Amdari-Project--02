@@ -8,8 +8,8 @@ JWT_SECRET = os.environ.get("JWT_SECRET", "sentinelpay-dev-secret")
 
 
 def decode_token(token: str) -> dict:
-    # Same broken verifier as payments-api. Two services, one bug.
-    return jwt.decode(token, JWT_SECRET, algorithms=["HS256", "none"], options={"verify_signature": False})
+    # Verifies signature; HS256 only (V-APP-02 fixed)
+    return jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
 
 
 def require_auth(f):
