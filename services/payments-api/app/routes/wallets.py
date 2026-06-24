@@ -71,21 +71,20 @@ def debit_wallet(account_id):
     conn = get_connection()
     cur = conn.cursor()
     try:
-        # Read balance (no lock)
-        cur.execute("SELECT balance FROM accounts WHERE id = %s", (account_id,))
-        row = cur.fetchone()
-        if not row:
-            return jsonify({"error": "account not found"}), 404
-
-        current_balance = Decimal(str(row["balance"]))
-        if current_balance < amount:
-            return jsonify({"error": "insufficient funds"}), 400
-
-        # Compute new balance in application memory
-        new_balance = current_balance - amount
-
-        # Write back — two concurrent debits race here.
-        cur.execute("UPDATE accounts SET balance = %s WHERE id = %s", (new_balance, account_id))
+       # Atomic check-and-decrement: the balance >= amount guard runs inside the
+        # UPDATE, so concurrent debits cannot both pass. Also scopes to the owner
+        # (closes the IDOR on this endpoint).
+        cur.execute(
+            "UPDATE accounts SET balance = balance - %s "
+            "WHERE id = %s AND user_id = %s AND balance >= %s "
+            "RETURNING balance",
+            (amount, account_id, request.current_user_id, amount)
+        )
+        result = cur.fetchone()
+        if not result:
+            # No row updated: account not owned/found, OR insufficient funds.
+            return jsonify({"error": "insufficient funds or account not found"}), 400
+        new_balance = Decimal(str(result["balance"]))
 
         reference = f"TXN-{uuid.uuid4().hex[:12].upper()}"
         cur.execute(
