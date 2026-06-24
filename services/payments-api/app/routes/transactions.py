@@ -21,18 +21,20 @@ def search_transactions():
     conn = get_connection()
     cur = conn.cursor()
     try:
-        # Concatenation, not parameterisation. Bypass auth scoping with a clever payload.
+        # Concatenation, not parameterisation. Bypass auth scoping with a clever payload. ---- FIXED by parameterising
+        like = f"%{q}%"
+        params = [like, like, like]
         query = (
             "SELECT id, account_id, reference, amount, currency, direction, "
             "counterparty, description, status, created_at "
-            f"FROM transactions WHERE (reference LIKE '%{q}%' "
-            f"OR counterparty LIKE '%{q}%' OR description LIKE '%{q}%')"
+            "FROM transactions WHERE (reference LIKE %s "
+            "OR counterparty LIKE %s OR description LIKE %s)"
         )
         if account_id:
-            query += f" AND account_id = {account_id}"
+            query += " AND account_id = %s"
+            params.append(account_id)
         query += " ORDER BY created_at DESC LIMIT 50"
-
-        cur.execute(query)
+        cur.execute(query, params)
         rows = cur.fetchall()
         return jsonify([dict(r) for r in rows])
     finally:
