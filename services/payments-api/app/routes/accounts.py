@@ -21,8 +21,8 @@ def get_account(account_id):
     try:
         cur.execute(
             "SELECT id, user_id, account_number, currency, balance, status, created_at "
-            "FROM accounts WHERE id = %s",
-            (account_id,)
+            "FROM accounts WHERE id = %s AND user_id = %s",
+            (account_id, request.current_user_id)
         )
         account = cur.fetchone()
         if not account:
@@ -69,12 +69,12 @@ def update_profile(account_id):
             return jsonify({"error": "no fields supplied"}), 400
 
         set_clause = ", ".join([f"{k} = %s" for k in data.keys()])
-        values = list(data.values()) + [account_id]
-        # Note: this is intentionally a parameterised query for the *values*,
-        # but the column names are concatenated from user input — see V-APP-07.
-        # SQLi on column names is not the bug here; mass assignment is.
-        cur.execute(f"UPDATE accounts SET {set_clause} WHERE id = %s RETURNING *", values)
+        values = list(data.values()) + [account_id, request.current_user_id]
+        
+        cur.execute(f"UPDATE accounts SET {set_clause} WHERE id = %s AND user_id = %s RETURNING *", values)
         updated = cur.fetchone()
+        if not updated:
+            return jsonify({"error": "account not found"}), 404
         conn.commit()
         return jsonify(dict(updated))
     finally:
