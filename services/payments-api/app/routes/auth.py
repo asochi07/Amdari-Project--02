@@ -2,7 +2,7 @@
 from flask import Blueprint, request, jsonify
 
 from app.db import get_connection
-from app.auth import hash_password, verify_password, issue_token
+from app.auth import hash_password, verify_password, issue_token, needs_rehash
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -57,7 +57,14 @@ def login():
             return jsonify({"error": "invalid credentials"}), 401
         if not user["is_active"]:
             return jsonify({"error": "account suspended"}), 403
-
+        # Transparent migration: upgrade legacy MD5 hashes to Argon2id on
+        # successful login, while the plaintext password is available.
+        if needs_rehash(user["password_hash"]):
+            cur.execute(
+                "UPDATE users SET password_hash = %s WHERE id = %s",
+                (hash_password(password), user["id"])
+            )
+            conn.commit()
         token = issue_token(user["id"], user["role"])
         return jsonify({"token": token, "user_id": user["id"], "role": user["role"]})
     finally:

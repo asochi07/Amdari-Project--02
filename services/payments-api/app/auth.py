@@ -9,22 +9,39 @@ import hashlib
 import jwt
 from functools import wraps
 from flask import request, jsonify
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError, InvalidHashError
+
+_ph = PasswordHasher()  # Argon2id with sensible defaults
 
 JWT_SECRET = os.environ.get("JWT_SECRET", "sentinelpay-dev-secret")
 
 
-def hash_password(password: str) -> str:
-    """Hash a password for storage.
 
-    V-APP-06: Uses MD5 with no salt. Trivially reversible for common passwords
-    via rainbow tables, and MD5 is cryptographically broken regardless.
-    """
-    return hashlib.md5(password.encode()).hexdigest()
+def hash_password(password: str) -> str:
+    """Hash a password for storage using Argon2id (salted, memory-hard)."""
+    return _ph.hash(password)
 
 
 def verify_password(password: str, stored_hash: str) -> bool:
-    return hash_password(password) == stored_hash
+    """Verify a password against a stored hash.
 
+    Supports transparent migration: legacy unsalted-MD5 hashes (32 hex chars)
+    are still accepted so existing users can log in, and are re-hashed to
+    Argon2id by the login route on success. New hashes are Argon2id.
+    """
+    # Legacy MD5 path (32-char hex). Kept only to allow migration on next login.
+    if len(stored_hash) == 32 and all(c in "0123456789abcdef" for c in stored_hash.lower()):
+        return hashlib.md5(password.encode()).hexdigest() == stored_hash
+    # Argon2id path
+    try:
+        return _ph.verify(stored_hash, password)
+    except (VerifyMismatchError, InvalidHashError):
+        return False
+
+def needs_rehash(stored_hash: str) -> bool:
+    """True if the stored hash is legacy MD5 and should be upgraded to Argon2id."""
+    return len(stored_hash) == 32 and all(c in "0123456789abcdef" for c in stored_hash.lower())
 
 def issue_token(user_id: int, role: str) -> str:
     """Issue a JWT for an authenticated user.
