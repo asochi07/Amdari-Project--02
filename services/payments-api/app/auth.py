@@ -15,6 +15,25 @@ from argon2.exceptions import VerifyMismatchError, InvalidHashError
 _ph = PasswordHasher()  # Argon2id with sensible defaults
 
 JWT_SECRET = os.environ.get("JWT_SECRET", "sentinelpay-dev-secret")
+# --- RS256 key configuration (V-APP-02 hardening) ---
+JWT_ALG = os.environ.get("JWT_ALG", "RS256")
+JWT_ACTIVE_KID = os.environ.get("JWT_ACTIVE_KID", "k1")
+
+
+def _read_key(path):
+    """Read a PEM key file from disk; return None if no path is configured."""
+    if not path:
+        return None
+    with open(path, "r") as f:
+        return f.read()
+
+
+# Loaded once at import. payments-api has both; a verify-only service has public only.
+_PRIVATE_KEY = _read_key(os.environ.get("JWT_PRIVATE_KEY_PATH"))
+_PUBLIC_KEYS = {}  # map of kid -> public key PEM, enables rotation
+_pub = _read_key(os.environ.get("JWT_PUBLIC_KEY_PATH"))
+if _pub:
+    _PUBLIC_KEYS[JWT_ACTIVE_KID] = _pub
 
 
 
@@ -44,23 +63,28 @@ def needs_rehash(stored_hash: str) -> bool:
     return len(stored_hash) == 32 and all(c in "0123456789abcdef" for c in stored_hash.lower())
 
 def issue_token(user_id: int, role: str) -> str:
-    """Issue a JWT for an authenticated user.
-
-    V-APP-02 (part 1): HS256 with a low-entropy, repository-committed secret.
-    """
+    """Issue a JWT signed with RS256 (asymmetric). The private key signs;
+    verifiers only need the public key. The kid header records which key
+    signed the token, enabling rotation."""
     payload = {"user_id": user_id, "role": role}
-    token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    token = jwt.encode(
+        payload,
+        _PRIVATE_KEY,                      # sign with the private key
+        algorithm="RS256",
+        headers={"kid": JWT_ACTIVE_KID},   # stamp which key signed it
+    )
     return token.decode("utf-8") if isinstance(token, bytes) else token
 
 
 def decode_token(token: str) -> dict:
-    """Decode and verify a JWT.
-
-    V-APP-02 (part 2): PyJWT 1.7.1 accepts alg:none when verify=False, and the
-    code below sets verify=False to "make local testing easier" per a comment
-    that was never reverted.
-    """
-    return jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+    """Verify a JWT using the RS256 public key matching the token's kid.
+    Fails closed: an unknown kid or a bad signature raises (-> 401)."""
+    header = jwt.get_unverified_header(token)   # peek at kid only; trusts nothing yet
+    kid = header.get("kid")
+    public_key = _PUBLIC_KEYS.get(kid)
+    if not public_key:
+        raise jwt.InvalidTokenError("unknown or missing key id")
+    return jwt.decode(token, public_key, algorithms=["RS256"])   # real verification
 
 
 def require_auth(f):
