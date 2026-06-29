@@ -5,6 +5,7 @@ from flask import Blueprint, request, jsonify
 
 from app.db import get_connection
 from app.auth import require_auth
+from app.audit import audit_log
 
 wallets_bp = Blueprint("wallets", __name__)
 
@@ -39,6 +40,11 @@ def credit_wallet(account_id):
         )
         conn.commit()
 
+        audit_log("wallet.credit", actor_id=request.current_user_id,
+                  result="success", account_id=account_id, amount=str(amount),
+                  new_balance=str(new_balance), reference=reference,
+                  source_ip=request.remote_addr)
+
         return jsonify({"reference": reference, "new_balance": str(new_balance)})
     finally:
         cur.close()
@@ -50,15 +56,8 @@ def credit_wallet(account_id):
 def debit_wallet(account_id):
     """Debit funds from a wallet.
 
-    V-APP-05: Race condition. The read of the current balance and the write
-    of the new balance happen in separate statements with no row lock and no
-    transactional boundary, so two concurrent debits can both observe the
-    same pre-balance and each succeed — allowing the account to be debited
-    below zero, or beyond the available funds.
-
-    V-APP-11: No audit log. Money movement is the most sensitive operation
-    in the platform, and there is no structured log of who debited what,
-    when, from where, and against which idempotency key.
+    V-APP-05: fixed — atomic check-and-decrement (see UPDATE below).
+    V-APP-11: fixed — structured audit logging on success and failure.
     """
     data = request.get_json() or {}
     amount = Decimal(str(data.get("amount", "0")))
@@ -71,7 +70,7 @@ def debit_wallet(account_id):
     conn = get_connection()
     cur = conn.cursor()
     try:
-       # Atomic check-and-decrement: the balance >= amount guard runs inside the
+        # Atomic check-and-decrement: the balance >= amount guard runs inside the
         # UPDATE, so concurrent debits cannot both pass. Also scopes to the owner
         # (closes the IDOR on this endpoint).
         cur.execute(
@@ -83,7 +82,12 @@ def debit_wallet(account_id):
         result = cur.fetchone()
         if not result:
             # No row updated: account not owned/found, OR insufficient funds.
+            audit_log("wallet.debit", actor_id=request.current_user_id,
+                      result="failure", account_id=account_id, amount=str(amount),
+                      source_ip=request.remote_addr,
+                      reason="insufficient_funds_or_not_owned")
             return jsonify({"error": "insufficient funds or account not found"}), 400
+
         new_balance = Decimal(str(result["balance"]))
 
         reference = f"TXN-{uuid.uuid4().hex[:12].upper()}"
@@ -93,6 +97,11 @@ def debit_wallet(account_id):
             (account_id, reference, amount, counterparty, description)
         )
         conn.commit()
+
+        audit_log("wallet.debit", actor_id=request.current_user_id,
+                  result="success", account_id=account_id, amount=str(amount),
+                  new_balance=str(new_balance), reference=reference,
+                  counterparty=counterparty, source_ip=request.remote_addr)
 
         return jsonify({"reference": reference, "new_balance": str(new_balance)})
     finally:
