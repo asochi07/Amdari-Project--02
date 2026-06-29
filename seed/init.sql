@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS webhooks (
     user_id         INTEGER REFERENCES users(id),
     callback_url    VARCHAR(500) NOT NULL,
     event_type      VARCHAR(50),
+    signing_secret  VARCHAR(128),
     created_at      TIMESTAMP DEFAULT NOW()
 );
 
