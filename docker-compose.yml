@@ -1,5 +1,4 @@
 version: "3.9"
-
 services:
   postgres:
     image: postgres:15-alpine
@@ -13,13 +12,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./seed/init.sql:/docker-entrypoint-initdb.d/init.sql
-
   redis:
     image: redis:7-alpine
     container_name: sentinelpay-redis
     ports:
       - "6379:6379"
-
   payments-api:
     build: ./services/payments-api
     container_name: sentinelpay-payments
@@ -29,16 +26,21 @@ services:
       DATABASE_URL: postgresql://sentinel:sentinel123@postgres:5432/sentinelpay
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: sentinelpay-dev-secret-do-not-use-in-prod
+      JWT_ALG: RS256
+      JWT_ACTIVE_KID: k1
+      JWT_PRIVATE_KEY_PATH: /run/keys/jwt-private-k1.pem
+      JWT_PUBLIC_KEY_PATH: /run/keys/jwt-public-k1.pem
       AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
       AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
       AWS_REGION: af-south-1
       KYC_BUCKET: sentinelpay-kyc-documents
       WEBHOOK_TIMEOUT: "10"
       ENVIRONMENT: development
+    volumes:
+      - ./keys:/run/keys:ro
     depends_on:
       - postgres
       - redis
-
   kyc-api:
     build: ./services/kyc-api
     container_name: sentinelpay-kyc
@@ -48,15 +50,18 @@ services:
       DATABASE_URL: postgresql://sentinel:sentinel123@postgres:5432/sentinelpay
       REDIS_URL: redis://redis:6379/1
       JWT_SECRET: sentinelpay-dev-secret-do-not-use-in-prod
+      JWT_ALG: RS256
+      JWT_PUBLIC_KEY_PATH: /run/keys/jwt-public-k1.pem
       AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
       AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
       AWS_REGION: af-south-1
       KYC_BUCKET: sentinelpay-kyc-documents
       BVN_LOOKUP_URL: https://api.mock-cbn.local/bvn
       ENVIRONMENT: development
+    volumes:
+      - ./keys:/run/keys:ro
     depends_on:
       - postgres
       - redis
-
 volumes:
   postgres_data:
