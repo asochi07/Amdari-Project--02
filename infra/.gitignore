@@ -1,0 +1,17 @@
+# Terraform working files
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Variable files that may hold secrets
+*.tfvars
+*.tfvars.json
+!example.tfvars
+
+# Plan output files
+*.tfplan
+
+# Keep the lock file (it SHOULD be committed)
+!.terraform.lock.hcl
