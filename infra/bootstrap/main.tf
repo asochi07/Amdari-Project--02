@@ -94,3 +94,47 @@ output "state_bucket" {
 output "lock_table" {
   value = aws_dynamodb_table.lock.id
 }
+
+# --- Access logging: a separate bucket to receive state-bucket access logs ---
+resource "aws_s3_bucket" "logs" {
+  bucket = "${var.state_bucket_name}-logs"
+}
+
+resource "aws_s3_bucket_public_access_block" "logs" {
+  bucket                  = aws_s3_bucket.logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# Send access logs from the state bucket into the logs bucket.
+resource "aws_s3_bucket_logging" "state" {
+  bucket        = aws_s3_bucket.state.id
+  target_bucket = aws_s3_bucket.logs.id
+  target_prefix = "state-access/"
+}
+
+# --- Enforce HTTPS-only (deny any request not using TLS) on the state bucket ---
+data "aws_iam_policy_document" "state_tls_only" {
+  statement {
+    sid       = "DenyInsecureTransport"
+    effect    = "Deny"
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.state.arn, "${aws_s3_bucket.state.arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "state" {
+  bucket = aws_s3_bucket.state.id
+  policy = data.aws_iam_policy_document.state_tls_only.json
+}
