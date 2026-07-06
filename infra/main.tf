@@ -40,11 +40,11 @@ module "identity" {
   app_bucket_arn        = "arn:aws:s3:::${module.data.app_bucket}"
 }
 
-output "rds_endpoint"          { value = module.data.rds_endpoint }
-output "app_bucket"            { value = module.data.app_bucket }
-output "db_secret_arn"         { value = module.data.db_secret_arn }
+output "rds_endpoint" { value = module.data.rds_endpoint }
+output "app_bucket" { value = module.data.app_bucket }
+output "db_secret_arn" { value = module.data.db_secret_arn }
 output "payments_task_role_arn" { value = module.identity.payments_task_role_arn }
-output "kyc_task_role_arn"      { value = module.identity.kyc_task_role_arn }
+output "kyc_task_role_arn" { value = module.identity.kyc_task_role_arn }
 output "github_deploy_role_arn" { value = module.identity.github_deploy_role_arn }
 # module "compute"       { source = "./modules/compute" }        # Day 8
 # module "observability" { source = "./modules/observability" }  # Day 8+
