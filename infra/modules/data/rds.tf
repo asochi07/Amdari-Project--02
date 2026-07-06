@@ -13,7 +13,7 @@ resource "aws_db_subnet_group" "this" {
 resource "aws_db_instance" "this" {
   identifier     = "${var.name_prefix}-postgres"
   engine         = "postgres"
-  engine_version = "16.4"
+  engine_version = "16"
   instance_class = var.db_instance_class
 
   allocated_storage     = 20
@@ -34,7 +34,7 @@ resource "aws_db_instance" "this" {
 
   # Enforce TLS and sensible operational defaults
   multi_az                     = false # single-AZ for cost in this engagement; document HA option
-  backup_retention_period      = 7
+  backup_retention_period     = 0
   deletion_protection          = false # false so the engagement can destroy; true in production
   skip_final_snapshot          = true  # engagement teardown; take a final snapshot in production
   auto_minor_version_upgrade   = true
