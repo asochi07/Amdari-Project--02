@@ -20,10 +20,11 @@ resource "random_password" "cache_auth" {
 
 # --- RDS master credentials ---
 resource "aws_secretsmanager_secret" "db" {
-  name        = "${var.name_prefix}/rds/master"
-  description = "RDS master credentials for ${var.name_prefix}"
-  kms_key_id  = aws_kms_key.secrets.arn
-  tags        = local.common_tags
+  name                    = "${var.name_prefix}/rds/master"
+  description             = "RDS master credentials for ${var.name_prefix}"
+  kms_key_id              = aws_kms_key.secrets.arn
+  recovery_window_in_days = 0
+  tags                    = local.common_tags
 }
 
 resource "aws_secretsmanager_secret_version" "db" {
@@ -52,10 +53,11 @@ resource "aws_secretsmanager_secret_rotation" "db" {
 
 # --- ElastiCache AUTH token ---
 resource "aws_secretsmanager_secret" "cache_auth" {
-  name        = "${var.name_prefix}/elasticache/auth-token"
-  description = "ElastiCache AUTH token for ${var.name_prefix}"
-  kms_key_id  = aws_kms_key.secrets.arn
-  tags        = local.common_tags
+  name                    = "${var.name_prefix}/elasticache/auth-token"
+  description             = "ElastiCache AUTH token for ${var.name_prefix}"
+  kms_key_id              = aws_kms_key.secrets.arn
+  recovery_window_in_days = 0
+  tags                    = local.common_tags
 }
 
 resource "aws_secretsmanager_secret_version" "cache_auth" {
