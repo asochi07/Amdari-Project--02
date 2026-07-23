@@ -19,10 +19,9 @@ module "data" {
   vpc_id             = module.network.vpc_id
   private_subnet_ids = module.network.private_subnet_ids
 
-  # App security groups don't exist until the compute module (Day 8),
-  # so ingress-by-reference rules are created empty (closed) for now
-  # and populated when compute lands.
-  app_security_group_ids = []
+  # Compute now exists (Day 8): feed the ECS task SG so RDS/ElastiCache
+  # admit it by reference. This closes the deferred Day 7 wiring.
+  app_security_group_ids = [module.compute.task_security_group_id]
 }
 
 module "identity" {
@@ -46,5 +45,14 @@ output "db_secret_arn" { value = module.data.db_secret_arn }
 output "payments_task_role_arn" { value = module.identity.payments_task_role_arn }
 output "kyc_task_role_arn" { value = module.identity.kyc_task_role_arn }
 output "github_deploy_role_arn" { value = module.identity.github_deploy_role_arn }
-# module "compute"       { source = "./modules/compute" }        # Day 8
+module "compute" {
+  source = "./modules/compute"
+
+  name_prefix            = var.name_prefix
+  vpc_id                 = module.network.vpc_id
+  public_subnet_ids      = module.network.public_subnet_ids
+  private_subnet_ids     = module.network.private_subnet_ids
+  payments_task_role_arn = module.identity.payments_task_role_arn
+  kyc_task_role_arn      = module.identity.kyc_task_role_arn
+}
 # module "observability" { source = "./modules/observability" }  # Day 8+

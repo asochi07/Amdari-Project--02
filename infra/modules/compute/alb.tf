@@ -1,0 +1,127 @@
+###############################################################################
+# Application Load Balancer - the ONLY internet-facing resource. Lives in the
+# public subnets; routes to ECS tasks in the private subnets. All inbound
+# internet traffic terminates here (constraint 68).
+###############################################################################
+
+resource "aws_lb" "this" {
+  name               = "${var.name_prefix}-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb.id]
+  subnets            = var.public_subnet_ids
+
+  drop_invalid_header_fields = true
+  enable_deletion_protection = false # false for engagement teardown
+  access_logs {
+    bucket  = aws_s3_bucket.alb_logs.id
+    enabled = true
+  }
+  tags = merge(local.common_tags, { Name = "${var.name_prefix}-alb" })
+}
+
+# Target group - payments-api
+resource "aws_lb_target_group" "payments" {
+  name        = "${var.name_prefix}-tg-payments"
+  port        = var.payments_container_port
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip" # Fargate uses awsvpc networking -> IP targets
+
+  health_check {
+    path                = "/"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+    matcher             = "200-399"
+  }
+  tags = merge(local.common_tags, { Name = "${var.name_prefix}-tg-payments" })
+}
+
+# Target group - kyc-api
+resource "aws_lb_target_group" "kyc" {
+  name        = "${var.name_prefix}-tg-kyc"
+  port        = var.kyc_container_port
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip"
+
+  health_check {
+    path                = "/"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+    matcher             = "200-399"
+  }
+  tags = merge(local.common_tags, { Name = "${var.name_prefix}-tg-kyc" })
+}
+
+# HTTP listener. Default action -> payments; /kyc/* -> kyc.
+# In production this listener would be HTTPS (443) with an ACM cert and an
+# HTTP->HTTPS redirect; HTTP-only here to avoid a cert dependency in the demo.
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.this.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.payments.arn
+  }
+}
+
+resource "aws_lb_listener_rule" "kyc" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.kyc.arn
+  }
+  condition {
+    path_pattern {
+      values = ["/kyc/*", "/verify/*", "/documents/*"]
+    }
+  }
+}
+
+###############################################################################
+# ALB access logs -> dedicated S3 bucket (SonarQube: elb access logging).
+# The ELB service in af-south-1 delivers logs via the regional log-delivery
+# service principal; the bucket policy grants it PutObject.
+###############################################################################
+
+data "aws_caller_identity" "current" {}
+data "aws_elb_service_account" "main" {}
+
+resource "aws_s3_bucket" "alb_logs" {
+  bucket = "${var.name_prefix}-alb-logs-${data.aws_caller_identity.current.account_id}"
+  tags   = merge(local.common_tags, { Name = "${var.name_prefix}-alb-logs" })
+}
+
+resource "aws_s3_bucket_public_access_block" "alb_logs" {
+  bucket                  = aws_s3_bucket.alb_logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+data "aws_iam_policy_document" "alb_logs" {
+  statement {
+    effect    = "Allow"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.alb_logs.arn}/*"]
+    principals {
+      type        = "AWS"
+      identifiers = [data.aws_elb_service_account.main.arn]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "alb_logs" {
+  bucket = aws_s3_bucket.alb_logs.id
+  policy = data.aws_iam_policy_document.alb_logs.json
+}
