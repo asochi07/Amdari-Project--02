@@ -130,3 +130,10 @@ resource "aws_cloudtrail" "this" {
   depends_on = [aws_s3_bucket_policy.trail]
   tags       = local.common_tags
 }
+
+# Access logging for the CloudTrail bucket -> shared detection logs bucket
+resource "aws_s3_bucket_logging" "trail" {
+  bucket        = aws_s3_bucket.trail.id
+  target_bucket = aws_s3_bucket.access_logs.id
+  target_prefix = "cloudtrail-access/"
+}

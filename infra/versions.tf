@@ -6,7 +6,7 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.100" # pin to v5 line for consistency across the project
     }
-    random = { source = "hashicorp/random", version = "~> 3.6" }
+    random  = { source = "hashicorp/random", version = "~> 3.6" }
     archive = { source = "hashicorp/archive", version = "~> 2.4" }
   }
 }

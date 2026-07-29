@@ -132,3 +132,72 @@ resource "aws_config_config_rule" "rds_encrypted" {
   }
   depends_on = [aws_config_configuration_recorder.this]
 }
+
+###############################################################################
+# Shared access-logs bucket for the detection buckets (Config + CloudTrail).
+# Locked-down, KMS-encrypted; it is itself the logging terminus.
+###############################################################################
+resource "aws_s3_bucket" "access_logs" {
+  bucket = "${var.name_prefix}-detect-logs-${local.account_id}"
+  tags   = merge(local.common_tags, { Name = "${var.name_prefix}-detect-logs" })
+}
+
+resource "aws_s3_bucket_public_access_block" "access_logs" {
+  bucket                  = aws_s3_bucket.access_logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "aws:kms"
+    }
+    bucket_key_enabled = true
+  }
+}
+
+# Config bucket hardening: encryption, access logging, TLS-only
+resource "aws_s3_bucket_server_side_encryption_configuration" "config" {
+  bucket = aws_s3_bucket.config.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "aws:kms"
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_logging" "config" {
+  bucket        = aws_s3_bucket.config.id
+  target_bucket = aws_s3_bucket.access_logs.id
+  target_prefix = "config-access/"
+}
+
+data "aws_iam_policy_document" "config_tls" {
+  statement {
+    sid       = "DenyInsecureTransport"
+    effect    = "Deny"
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.config.arn, "${aws_s3_bucket.config.arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+# Note: merged with the existing AWS Config delivery policy if one exists;
+# here the bucket has no other policy, so this is the bucket policy.
+resource "aws_s3_bucket_policy" "config_tls" {
+  bucket = aws_s3_bucket.config.id
+  policy = data.aws_iam_policy_document.config_tls.json
+}
