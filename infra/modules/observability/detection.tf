@@ -201,3 +201,27 @@ resource "aws_s3_bucket_policy" "config_tls" {
   bucket = aws_s3_bucket.config.id
   policy = data.aws_iam_policy_document.config_tls.json
 }
+
+# HTTPS-only policy on the shared access-logs bucket
+data "aws_iam_policy_document" "access_logs_tls" {
+  statement {
+    sid       = "DenyInsecureTransport"
+    effect    = "Deny"
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.access_logs.arn, "${aws_s3_bucket.access_logs.arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "access_logs_tls" {
+  bucket = aws_s3_bucket.access_logs.id
+  policy = data.aws_iam_policy_document.access_logs_tls.json
+}
