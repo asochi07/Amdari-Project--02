@@ -55,4 +55,9 @@ module "compute" {
   payments_task_role_arn = module.identity.payments_task_role_arn
   kyc_task_role_arn      = module.identity.kyc_task_role_arn
 }
-# module "observability" { source = "./modules/observability" }  # Day 8+
+module "observability" {
+  source = "./modules/observability"
+
+  name_prefix = var.name_prefix
+  region      = var.region
+}
