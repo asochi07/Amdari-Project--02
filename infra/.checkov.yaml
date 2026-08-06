@@ -1,0 +1,15 @@
+# Checkov configuration for SentinelPay infra.
+# Each skipped check is a correct-by-design decision, documented here.
+# These mirror dispositions already recorded in SonarQube reviews.
+skip-check:
+  # --- Deliberate architecture (internet-facing edge) ---
+  - CKV_AWS_382  # SG egress 0.0.0.0/0: standard outbound; egress is not the control boundary here
+  - CKV_AWS_260  # SG ingress :80 from 0.0.0.0/0: the internet-facing ALB's public entry, WAF-filtered
+  - CKV_AWS_2    # ALB HTTPS: HTTP listener is a sandbox-demo choice; prod terminates TLS/443 + redirect
+  - CKV_AWS_150  # ALB deletion protection: intentionally false for engagement apply/destroy cycle
+  # --- Logging termini / demo retention ---
+  - CKV_AWS_338  # CW log retention >=1yr: demo retention is deliberately shorter to control cost
+  - CKV_AWS_158  # CW log group KMS: log groups hold operational logs; default encryption accepted for demo
+  # --- State-lock DynamoDB table (bootstrap) ---
+  - CKV_AWS_28   # DynamoDB PITR: tflock holds only transient lock records, no recoverable data
+  - CKV_AWS_119  # DynamoDB CMK: lock table has no sensitive data; AWS-managed encryption at rest suffices
