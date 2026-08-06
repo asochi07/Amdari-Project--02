@@ -10,4 +10,4 @@ pyjwt==2.13.0
 requests==2.25.1
 boto3==1.20.0
 gunicorn==22.0.0
-cryptography==44.0.1
+cryptography==50.0.0
