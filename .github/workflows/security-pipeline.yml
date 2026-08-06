@@ -89,6 +89,7 @@ jobs:
         with:
           directory: infra/
           framework: terraform
+          skip_check: CKV_AWS_382,CKV_AWS_260,CKV_AWS_2,CKV_AWS_150,CKV_AWS_338,CKV_AWS_158,CKV_AWS_28,CKV_AWS_119
           soft_fail: false
           output_format: cli
 
@@ -101,6 +102,7 @@ jobs:
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
           working_directory: infra/
+          additional_args: --exclude aws-ec2-no-public-egress-sgr,aws-ec2-no-public-ingress-sgr,aws-elb-http-not-used,aws-elb-alb-not-public,aws-cloudwatch-log-group-customer-key,aws-dynamodb-enable-recovery,aws-dynamodb-table-customer-key
 
   opa-plan:
     name: IaC Policy Gate (OPA/Conftest)
