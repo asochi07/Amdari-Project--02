@@ -22,4 +22,4 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(host="0.0.0.0", port=8002, debug=True)
+    app.run(host="0.0.0.0", port=8002, debug=False)  # nosec B104 - bind-all is required inside the container; ingress controlled by task SG + ALB
