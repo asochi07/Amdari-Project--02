@@ -78,3 +78,59 @@ jobs:
         run: |
           echo "Successfully assumed role via OIDC:"
           aws sts get-caller-identity
+
+  checkov:
+    name: IaC Scan (Checkov)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Checkov on Terraform
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: infra/
+          framework: terraform
+          soft_fail: false
+          output_format: cli
+
+  tfsec:
+    name: IaC Scan (tfsec)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tfsec on Terraform
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: infra/
+
+  opa-plan:
+    name: IaC Policy Gate (OPA/Conftest)
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::143985718659:role/sentinelpay-github-deploy
+          aws-region: af-south-1
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - name: Terraform init
+        working-directory: infra
+        run: terraform init -input=false
+      - name: Terraform plan (no refresh; infra not applied)
+        working-directory: infra
+        run: |
+          terraform plan -input=false -refresh=false -out=tfplan.bin
+          terraform show -json tfplan.bin > plan.json
+      - name: Install Conftest
+        run: |
+          CFVER=0.56.0
+          curl -sL -o conftest.tar.gz "https://github.com/open-policy-agent/conftest/releases/download/v${CFVER}/conftest_${CFVER}_Linux_x86_64.tar.gz"
+          tar xzf conftest.tar.gz
+          sudo mv conftest /usr/local/bin/
+      - name: Run OPA policy pack against the plan
+        run: conftest test infra/plan.json --policy policy --all-namespaces
