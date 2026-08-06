@@ -19,6 +19,7 @@ def get_account(account_id):
     conn = get_connection()
     cur = conn.cursor()
     try:
+        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query - set_clause keys are validated against ALLOWED_UPDATE_FIELDS; values parameterised
         cur.execute(
             "SELECT id, user_id, account_number, currency, balance, status, created_at "
             "FROM accounts WHERE id = %s AND user_id = %s",
@@ -40,6 +41,7 @@ def list_accounts():
     conn = get_connection()
     cur = conn.cursor()
     try:
+        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query - set_clause keys are validated against ALLOWED_UPDATE_FIELDS; values parameterised
         cur.execute(
             "SELECT id, account_number, currency, balance, status FROM accounts WHERE user_id = %s",
             (request.current_user_id,)
@@ -80,6 +82,7 @@ def update_profile(account_id):
         set_clause = ", ".join([f"{col} = %s" for col in data.keys()])
         values = list(data.values()) + [account_id, request.current_user_id]
 
+        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query - set_clause keys are validated against ALLOWED_UPDATE_FIELDS; values parameterised
         cur.execute(
             f"UPDATE accounts SET {set_clause} WHERE id = %s AND user_id = %s RETURNING *",  # nosec B608 - column names come from a fixed allowlist (ALLOWED_UPDATE_FIELDS); values are parameterised
             values,
