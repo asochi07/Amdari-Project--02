@@ -5,7 +5,6 @@ but @femi flagged some concerns in his exit ticket that we never got back to.
 See PR #284 (closed without merge).
 """
 import os
-import hashlib
 import jwt
 from functools import wraps
 from flask import request, jsonify
@@ -45,14 +44,14 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, stored_hash: str) -> bool:
     """Verify a password against a stored hash.
 
-    Supports transparent migration: legacy unsalted-MD5 hashes (32 hex chars)
-    are still accepted so existing users can log in, and are re-hashed to
-    Argon2id by the login route on success. New hashes are Argon2id.
+    Passwords are verified with Argon2id only. The legacy MD5 path was removed
+    as part of remediation; accounts on old hashes must reset their password.
     """
-    # Legacy MD5 path (32-char hex). Kept only to allow migration on next login.
-    if len(stored_hash) == 32 and all(c in "0123456789abcdef" for c in stored_hash.lower()):
-        return hashlib.md5(password.encode()).hexdigest() == stored_hash
-    # Argon2id path
+    # V-APP remediation: the legacy unsalted-MD5 verification path has been
+    # removed. MD5 is cryptographically broken and accepting it left legacy
+    # accounts trivially crackable. Only Argon2id is accepted; accounts still on
+    # an old hash must reset their password rather than be silently accepted.
+    # Argon2id verification (the only accepted path):
     try:
         return _ph.verify(stored_hash, password)
     except (VerifyMismatchError, InvalidHashError):

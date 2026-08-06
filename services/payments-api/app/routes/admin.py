@@ -5,7 +5,7 @@ internal-only network' never materialised, and the endpoints now ship behind
 the same ALB as everything else.
 """
 import base64
-import pickle
+import json
 from flask import Blueprint, request, jsonify
 
 from app.db import get_connection
@@ -19,10 +19,10 @@ admin_bp = Blueprint("admin", __name__)
 def restore_session():
     """Restore an admin session from a serialised blob.
 
-    V-APP-10: Insecure deserialisation. The session payload is a base64-encoded
-    pickle, and pickle.loads will execute arbitrary code embedded in the blob.
-    Trivial RCE for any caller who can hit this endpoint with a forged token
-    (which V-APP-02 makes easy).
+    V-APP-10 (remediated): the session payload was formerly a base64-encoded
+    pickle, which allowed arbitrary code execution. It is now parsed as JSON,
+    which cannot execute code. The endpoint only reads back the session keys.
+
     """
     data = request.get_json() or {}
     blob = data.get("session")
@@ -32,7 +32,11 @@ def restore_session():
 
     try:
         raw = base64.b64decode(blob)
-        session = pickle.loads(raw)
+        # V-APP-10 remediation: never unpickle untrusted input (RCE). JSON cannot
+        # execute code. Reject anything that is not a JSON object.
+        session = json.loads(raw)
+        if not isinstance(session, dict):
+            return jsonify({"error": "invalid session payload"}), 400
         return jsonify({"restored": True, "session_keys": list(session.keys())})
     except Exception as e:
         return jsonify({"error": str(e)}), 400

@@ -9,4 +9,6 @@ COPY . .
 
 EXPOSE 8001
 
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser /app
+USER appuser
 CMD ["python", "-m", "app.main"]

@@ -56,22 +56,34 @@ def list_accounts():
 def update_profile(account_id):
     """Update account profile fields.
 
-    V-APP-07: Mass assignment. The update accepts an arbitrary dict and writes
-    every key the client provides, including 'status', 'user_id', and 'balance'.
-    A merchant can transfer an account to themselves or set their balance.
+    V-APP-07 remediation: only an explicit allowlist of non-sensitive columns
+    may be updated. Sensitive columns (id, user_id, balance, status,
+    account_number) are never client-writable, which closes both the mass-
+    assignment flaw and the column-name SQL-injection Semgrep flagged, because
+    column names now come from a fixed set rather than client input.
     """
+    ALLOWED_UPDATE_FIELDS = {"currency"}
+
     data = request.get_json() or {}
+    if not data:
+        return jsonify({"error": "no fields supplied"}), 400
+
+    invalid = set(data.keys()) - ALLOWED_UPDATE_FIELDS
+    if invalid:
+        return jsonify({"error": f"fields not permitted: {sorted(invalid)}"}), 400
+
     conn = get_connection()
     cur = conn.cursor()
     try:
-        # Build dynamic SET clause from whatever the client sent
-        if not data:
-            return jsonify({"error": "no fields supplied"}), 400
-
-        set_clause = ", ".join([f"{k} = %s" for k in data.keys()])
+        # Column names are drawn from the fixed allowlist above, never from
+        # raw client input; values remain fully parameterised.
+        set_clause = ", ".join([f"{col} = %s" for col in data.keys()])
         values = list(data.values()) + [account_id, request.current_user_id]
-        
-        cur.execute(f"UPDATE accounts SET {set_clause} WHERE id = %s AND user_id = %s RETURNING *", values)
+
+        cur.execute(
+            f"UPDATE accounts SET {set_clause} WHERE id = %s AND user_id = %s RETURNING *",  # nosec B608 - column names come from a fixed allowlist (ALLOWED_UPDATE_FIELDS); values are parameterised
+            values,
+        )
         updated = cur.fetchone()
         if not updated:
             return jsonify({"error": "account not found"}), 404
